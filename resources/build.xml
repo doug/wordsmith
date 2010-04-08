@@ -1,8 +1,8 @@
 <project name="wordsmith" default="build" basedir="../">
     
 	<description>
-        wordsmith. ant build file.
-    </description>
+	  wordsmith. ant build file.
+  </description>
 
 	
 <!-- #### (1) where are your processing libraries located? edit location. #### -->
@@ -17,15 +17,12 @@
 		<fileset dir="${libraryClasspath}" >		
 <!-- #### (3) add the jar files that are required for compiling. edit name.
 		for more include files. duplicate <include name="" /> #### -->
-			<include name="core.jar"/>
 		</fileset>
 	</path>		
 	
 
 <!-- #### (4) set the java version that should be used to compile your library. #### -->	
 	<property name="javaVersion" value="1.5"/>
-		
-		
 		
 	<!-- #### 	the following items are properties that will be used to make changes to 
 				the html document template. values of properties will be 
@@ -47,16 +44,16 @@
 	<property name="yourLink"  value="http://www.processing.org" />
 	
 <!-- #### (10) a comma separated list of keywords describing your library. edit value. #### -->
-	<property name="keywords"  value="?" />
+	<property name="keywords"  value="text, parsing, machine learning, lda" />
 	
 <!-- #### (11) a comma separated list of platforms the library has been tested. edit value. #### -->
-	<property name="tested:platform"  value="?" />
+	<property name="tested:platform"  value="osx" />
 	
 <!-- #### (12) the processing version this library has been tested with. edit value. #### -->
-	<property name="tested:processingVersion"  value="?" />
+	<property name="tested:processingVersion"  value="1.1" />
 	
 <!-- #### (13) does the library depend on any other library, dll, jnilib, etc. edit value. #### -->
-	<property name="tested:dependencies"  value="?" />
+	<property name="tested:dependencies"  value="mallet, mallet-deps" />
 	
 <!-- #### (14) where can the source code be found? edit value. #### -->
 	<property name="source:host"  value="google code" />
@@ -141,7 +138,10 @@
   	<copy todir="${dist}/src">
   		<fileset dir="src"/>
   	</copy> 
-  	
+  	<copy todir="${dist}/library">
+  	  <fileset dir="libs"/>
+  	</copy>
+  	    
 	<!-- create the java reference of the library -->
  	<mkdir dir="${reference}" />
  	<javadoc bottom="processing library ${libraryName} by ${author}. ${copyright}" 
@@ -167,7 +167,7 @@
   	  	<mkdir dir="${processing}/${libraryName}" />
   		<copy todir="${processing}/${libraryName}">
   			<fileset dir="${dist}"/>
-  		</copy> 
+  		</copy>
 
   	<!-- zip the distribution of the library -->
   	<zip destfile="${dist}/${libraryName}.zip"
