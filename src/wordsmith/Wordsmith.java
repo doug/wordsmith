@@ -2,6 +2,8 @@
   A wrapper for Mallet's LDA implementation for the Processing community.
   
   Copyright (c) 2010 MIT Media Lab
+  Authors: Aaron Zinman <azinman@media.mit.edu>
+           Doug Fritz <doug@media.mit.edu>
   
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
@@ -17,7 +19,7 @@
   Public License along with this library; if not, write to the
   Free Software Foundation, Inc., 59 Temple Place, Suite 330,
   Boston, MA  02111-1307 USA
- */
+*/
 
 package wordsmith;
 
