@@ -403,6 +403,9 @@ public class Stopwords {
     "tinyurl",
     "rt", // re-tweet
     "twitpic",
+    "org",
+    "edu",
+    "com"
   };
 
 }
