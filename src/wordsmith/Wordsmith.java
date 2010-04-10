@@ -26,7 +26,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -40,15 +39,18 @@ import cc.mallet.pipe.Noop;
 import cc.mallet.pipe.Pipe;
 import cc.mallet.pipe.SaveDataInSource;
 import cc.mallet.pipe.SerialPipes;
-import cc.mallet.pipe.Target2Label;
 import cc.mallet.pipe.TokenSequence2FeatureSequence;
 import cc.mallet.pipe.TokenSequenceLowercase;
 import cc.mallet.pipe.TokenSequenceRemoveStopwords;
 import cc.mallet.pipe.iterator.FileIterator;
 import cc.mallet.topics.ParallelTopicModel;
 import cc.mallet.topics.TopicAssignment;
+import cc.mallet.types.Alphabet;
+import cc.mallet.types.FeatureSelection;
 import cc.mallet.types.FeatureSequence;
+import cc.mallet.types.FeatureVector;
 import cc.mallet.types.IDSorter;
+import cc.mallet.types.InfoGain;
 import cc.mallet.types.Instance;
 import cc.mallet.types.InstanceList;
 import cc.mallet.types.LabelSequence;
@@ -62,27 +64,34 @@ import cc.mallet.types.LabelSequence;
  * 
  */
 public class Wordsmith {
+  public final String VERSION = "0.1.0";
 
-	private PApplet myParent;
 	private ParallelTopicModel lda = null;
-	private String outputStateFile = null, outputModelFile = null;
 	private int k = -1;
-	private double alpha = -1, beta = -1;
 	private boolean createModel = true;
 	private int showTopicsInterval = 10, showNTopWords = 7;
-
-	public final String VERSION = "0.1.0";
-
-	private boolean setInstances = false;
-  private HashSet<String> stopwordsList = new HashSet<String>();
-  private boolean addedEnglishStopwords = false;
-  private boolean filterHtml = false;
+  private boolean setInstances = false;
   private int numIterations = -1;
   private int numThreads = 1; // 1 thread by default, for 1 core
+  
+  private String outputStateFile = null, outputModelFile = null;
+  private String outputIntermediateStateFile = null;
+  private int outputIntermediateStateFrequency = 10;
+  private String outputIntermediateModelFile = null;
+  private int outputIntermediateModelFrequency = 10;
+
+	private HashSet<String> stopwordsList = new HashSet<String>();
+  private boolean addedEnglishStopwords = false;
+  private boolean filterHtml = false;
+  private boolean pruneUsingInfoGain = false;
+  private int pruneToTopN = 5000;
+  private boolean pruneBottomN = true;
+  private int pruneBottomThreshold = 3;
+ 
   private Object[][] topWordsCache = null;
   private TreeSet<IDSorter>[] topicSortedWordsCache = null;
 
-  private InstanceList ilist = new InstanceList (makeNewInstancePipe());
+  private InstanceList ilist = null;
 	
 	/**
 	 * a Constructor, usually called in the setup() method in your sketch to
@@ -90,9 +99,7 @@ public class Wordsmith {
 	 * 
 	 * @param theParent
 	 */
-	public Wordsmith(PApplet theParent) {
-		myParent = theParent;
-	}
+	public Wordsmith(PApplet theParent) {}
 	
 	// CREATE MODEL ----------------------------------------------------------------------------------
 	
@@ -107,17 +114,15 @@ public class Wordsmith {
 	}
 	
 	
-	public void createNewModel(int numberOfTopics, double alpha, double beta, String outputFile) {
+	public void createNewModel(int numberOfTopics, double alpha, double beta) {
     this.createModel = true;
 	  this.k = numberOfTopics;
-	  this.alpha = alpha;
-	  this.beta = beta;
 	  this.numIterations = 250;
     lda = new ParallelTopicModel(numberOfTopics, alpha, beta);
 	}
 
-	public void createNewModel(int numberOfTopics, String outputFile) {
-    createNewModel(numberOfTopics, 50.0 / numberOfTopics, 0.03, outputFile);
+	public void createNewModel(int numberOfTopics) {
+    createNewModel(numberOfTopics, 50.0 / numberOfTopics, 0.03);
   }
 	
 	// CONFIGURE MODEL -------------------------------------------------------------------------------
@@ -142,10 +147,20 @@ public class Wordsmith {
     this.numIterations  = numIterations;
   }
   
+  public void saveIntermediateStateToFile(String filepath, int frequency) {
+    outputIntermediateStateFile = filepath;
+    outputIntermediateStateFrequency = frequency;
+  }
+
+  public void saveIntermediateModelToFile(String filepath, int frequency) {
+    outputIntermediateModelFile = filepath;
+    outputIntermediateModelFrequency = frequency;
+  }
+
   public void saveFinishedModelToFile(String filepath) {
     outputModelFile = filepath;
   }
-  
+    
   public void saveFinishedStateToFile(String filepath) {
     outputStateFile = filepath;
   }
@@ -157,11 +172,11 @@ public class Wordsmith {
     }
     numThreads = numCores;
   }
-
+   
   // STOPWORDS -------------------------------------------------------------------------------------
 
   public void removeWordFromDocuments(String word) {
-    stopwordsList.add(word);
+    stopwordsList.add(word.toLowerCase());
   }
   
   public void removeCommonEnglishWordsFromDocuments() {
@@ -169,30 +184,120 @@ public class Wordsmith {
       System.err.println("Already added common english words... ignoring");
       return;
     }
+    addedEnglishStopwords = true;
   }
   
   public void removeHtmlFromDocuments() {
     filterHtml = true;
   }
   
-  // USE MODEL -------------------------------------------------------------------------------
+  public void pruneToTopWordsUsingInformationGain(int numDesiredWords) {
+    this.pruneUsingInfoGain = true;
+    this.pruneToTopN = numDesiredWords;
+  }
+  
+  public void pruneWordsOccurringLessThanThreshold(int threshold) {
+    this.pruneBottomN = true;
+    this.pruneBottomThreshold = threshold;
+  }
+
+  // INFERENCE -------------------------------------------------------------------------------------
 	
 	public void extractTopicsFromDocuments() {
-	  if (lda == null) {
-	    System.err.println("You must first call either createNewModel or loadExistingModel. " +
-	    		"You probably want to call createNewModel, as runAlgorithm does the inference process " +
-	    		"over previously entered documents.");
+	  if (!canStartLda()) {
 	    return;
 	  }
 	  
-	  if (!setInstances) {
-	    System.err.println("You have not added any documents. You can use:\n" +
-	                       "addDocumentInString(\"this is my short document\") or\n" +
-	                       "addDocumentInFile(\"path/to/my/favorite/file\") or\n" + 
-	                       "addDocumentsInDirectory(\"/path/to/a/directory/of/files\")");
-	    return;
-	  }
-	  
+    doPrune();
+	  configureLda();
+
+	  System.out.println("Starting LDA Inference... this might take a while (read: hours) depending " +
+	  		"on the number of topics, number of documents, and document length.");
+		try {
+	    lda.addInstances(ilist);
+			lda.estimate();
+		} catch (IOException e) {
+			e.printStackTrace();
+			System.err.println("LDA estimation failed: " + e.getMessage());
+		}
+
+		saveState();
+	}
+	
+  private void doPrune() {
+    if (pruneBottomN) {
+      long startTime = System.currentTimeMillis();
+
+      // Version for feature sequences
+
+      Alphabet oldAlphabet = ilist.getDataAlphabet();
+      Alphabet newAlphabet = new Alphabet();
+
+      // It's necessary to create a new instance list in
+      //  order to make sure that the data alphabet is correct.
+      Noop newPipe = new Noop (newAlphabet, ilist.getTargetAlphabet());
+      InstanceList newInstanceList = new InstanceList (newPipe);
+
+      // Iterate over the ilist in the old list, adding
+      //  up occurrences of features.
+      int numFeatures = oldAlphabet.size();
+      double[] counts = new double[numFeatures];
+      for (int ii = 0; ii < ilist.size(); ii++) {
+        Instance instance = ilist.get(ii);
+        FeatureSequence fs = (FeatureSequence) instance.getData();
+
+        fs.addFeatureWeightsTo(counts);
+      }
+
+      // Next, iterate over the same list again, adding 
+      //  each instance to the new list after pruning.
+      while (ilist.size() > 0) {
+        Instance instance = ilist.get(0);
+        FeatureSequence fs = (FeatureSequence) instance.getData();
+
+        fs.prune(counts, newAlphabet, pruneBottomThreshold);
+
+        newInstanceList.add(newPipe.instanceFrom(new Instance(fs, instance.getTarget(),
+                                                              instance.getName(),
+                                                              instance.getSource())));
+        ilist.remove(0);
+      }
+
+      System.out.println("Reduced vocab from " + oldAlphabet.size() + 
+                         " words to " + newAlphabet.size());
+
+      // Make the new list the official list.
+      ilist = newInstanceList;
+
+      System.out.println("Finishing pruning uncommon words! It took " + 
+                         HumanTime.exactly(System.currentTimeMillis() - startTime));
+    }
+
+    if (pruneUsingInfoGain) {
+      long startTime = System.currentTimeMillis();
+
+      Alphabet alpha2 = new Alphabet ();
+      Noop pipe2 = new Noop (alpha2, ilist.getTargetAlphabet());
+      InstanceList instances2 = new InstanceList (pipe2);
+      InfoGain ig = new InfoGain (ilist);
+      FeatureSelection fs = new FeatureSelection (ig, pruneToTopN);
+      for (int ii = 0; ii < ilist.size(); ii++) {
+        Instance instance = ilist.get(ii);
+        FeatureVector fv = (FeatureVector) instance.getData();
+        FeatureVector fv2 = FeatureVector.newFeatureVector (fv, alpha2, fs);
+        instance.unLock();
+        instance.setData(null); // So it can be freed by the garbage collector
+        instances2.add(pipe2.instanceFrom(new Instance(fv2, instance.getTarget(), instance.getName(), instance.getSource())),
+                 ilist.getInstanceWeight(ii));
+      }
+      ilist = instances2;
+      
+      System.out.println("Finishing pruning vocabulary to top " + pruneToTopN + "! It took " + 
+                         HumanTime.exactly(System.currentTimeMillis() - startTime));
+    }
+  }
+  
+  private void configureLda() {
     lda.setTopicDisplay(showTopicsInterval, showNTopWords);
     lda.setNumIterations(numIterations);
     if (numIterations < 1) {
@@ -209,31 +314,38 @@ public class Wordsmith {
       lda.setBurninPeriod(0);
     }
     
-    if (outputStateFile != null) {
-      lda.setSaveState(10, outputStateFile);
+    if (outputIntermediateStateFile != null) {
+      lda.setSaveState(outputIntermediateStateFrequency, outputIntermediateStateFile);
     }
 
-    if (outputModelFile != null) {
-      lda.setSaveSerializedModel(10, outputModelFile);
+    if (outputIntermediateModelFile != null) {
+      lda.setSaveSerializedModel(outputIntermediateModelFrequency, outputIntermediateModelFile);
     }
 
     lda.setNumThreads(numThreads);
-
-	  System.out.println("Starting LDA Inference... this might take a while (read: hours) depending " +
-	  		"on the number of topics, number of documents, and document length.");
-    long startTime = System.currentTimeMillis();
-		try {
-	    lda.addInstances(ilist);
-			lda.estimate();
-		} catch (IOException e) {
-			e.printStackTrace();
-			System.err.println("LDA estimation failed: " + e.getMessage());
-		}
-		System.out.println("Inference finished! It took " + 
-		                   HumanTime.exactly(System.currentTimeMillis() - startTime));
-		
-		if (outputModelFile != null) {
-		  System.out.println("Saving model to disk.");
+  }
+  
+  private boolean canStartLda() {
+    if (lda == null) {
+      System.err.println("You must first call either createNewModel or loadExistingModel. " +
+          "You probably want to call createNewModel, as runAlgorithm does the inference process " +
+          "over previously entered documents.");
+      return false;
+    }
+    
+    if (!setInstances) {
+      System.err.println("You have not added any documents. You can use:\n" +
+                         "addDocumentInString(\"this is my short document\") or\n" +
+                         "addDocumentInFile(\"path/to/my/favorite/file\") or\n" + 
+                         "addDocumentsInDirectory(\"/path/to/a/directory/of/files\")");
+      return false;
+    }
+    return true;
+  }
+  
+  private void saveState() {
+    if (outputModelFile != null) {
+      System.out.println("Saving model to disk.");
       assert (lda != null);
       try {
         ObjectOutputStream oos = new ObjectOutputStream (new FileOutputStream (outputModelFile));
@@ -245,21 +357,23 @@ public class Wordsmith {
         throw new IllegalArgumentException (
              "Couldn't write topic model to filename " + outputModelFile);
       }
-		}
+    }
 
-	  if (outputStateFile != null) {
-	    System.out.println("Saving model to disk.");
-	    assert (lda != null);
-	    try {
-	      lda.printState(new File(outputStateFile));
-	    } catch (Exception e) {
-	      e.printStackTrace();
-	      throw new IllegalArgumentException (
-	           "Couldn't write topic model state to filename " + outputStateFile);
-	    }
-	  }
-	}
-	
+    if (outputStateFile != null) {
+      System.out.println("Saving model to disk.");
+      assert (lda != null);
+      try {
+        lda.printState(new File(outputStateFile));
+      } catch (Exception e) {
+        e.printStackTrace();
+        throw new IllegalArgumentException (
+             "Couldn't write topic model state to filename " + outputStateFile);
+      }
+    }
+  }
+
+  // USE INFERRED RESULTS --------------------------------------------------------------------------
+
 	public String[] getTopWordsForTopic(int n) {
 	  if (n > k) {
 	    System.err.println("You must enter a topic number from 0 to " + k);
@@ -275,10 +389,14 @@ public class Wordsmith {
 	    topWordsCache = lda.getTopWords(1000);
 	  }
 	  
-		return (String[]) topWordsCache[n];
+    String[] toString = new String[topWordsCache[n].length];
+    System.arraycopy(topWordsCache[n], 0, toString, 0, topWordsCache[n].length);
+    
+		return toString;
 	}
 
-	public WeightedWord[] getTopWeightedWordsForTopic(int n) {
+	@SuppressWarnings("unchecked")
+  public WeightedWord[] getTopWeightedWordsForTopic(int n) {
     if (n > k) {
 	    System.err.println("You must enter a topic number from 0 to " + k);
       return null;
@@ -332,28 +450,37 @@ public class Wordsmith {
 	private SerialPipes makeNewInstancePipe() {
 	  return new SerialPipes (
 	      new Pipe[] {
-          new Target2Label(),
           new SaveDataInSource(),
+//          new PrintInputAndTarget ("SaveDataInSource"),
           new Input2CharSequence(),
+//          new PrintInputAndTarget ("Input2CharSequence"),
           (filterHtml
            ? (Pipe) new CharSequenceRemoveHTML()
            : (Pipe) new Noop()),
+//          new PrintInputAndTarget ("CharSequenceRemoveHTML (" + filterHtml + ") or noop"),
           new CharSequence2TokenSequence(),
+//          new PrintInputAndTarget ("CharSequence2TokenSequence"), 
           new TokenSequenceLowercase(),
-          //new PrintInputAndTarget (), // xxx
+//          new PrintInputAndTarget ("TokenSequenceLowercase"),
           (addedEnglishStopwords
            ? (Pipe) new TokenSequenceRemoveStopwords(false, false)
                         .addStopWords(stopwordsList.toArray(new String[0]))
-           : (Pipe) new Noop()),
+                        .addStopWords(Stopwords.augmentedEnglishStopWords)
+           : (Pipe) new TokenSequenceRemoveCustomStopwords(stopwordsList)),
+//          new PrintInputAndTarget ("TokenSequenceRemoveStopwords (" + addedEnglishStopwords + ") or TokenSequenceRemoveCustomStopwords"), // xxx
+          (filterHtml
+                  ? (Pipe) new TokenSequenceRemoveCustomStopwords(new HashSet<String>())
+                           .addStopWords(Stopwords.htmlStopWords)
+                  : (Pipe) new Noop()),
+
+          
           new TokenSequence2FeatureSequence(),
-//          new FeatureSequence2AugmentableFeatureVector(false), // keep sequence
-          // or FeatureSequence2FeatureVector
-          //new PrintInputAndTarget ()
+//          new PrintInputAndTarget ("TokenSequence2FeatureSequence"),
         });
 	}
 	
 	public void addDocumentsInDirectory(String directory) {
-	  InstanceList ilist = new InstanceList (makeNewInstancePipe());
+    if (ilist == null) { ilist = new InstanceList (makeNewInstancePipe());}
 	  boolean removeCommonPrefix=true;
 	  ilist.addThruPipe(
         new FileIterator(directory, FileIterator.STARTING_DIRECTORIES, removeCommonPrefix));
@@ -366,11 +493,14 @@ public class Wordsmith {
 
 
   public void addDocumentInFile(File f) {
+    if (ilist == null) { ilist = new InstanceList (makeNewInstancePipe());}
     ilist.addThruPipe(new Instance(f, null, f.toURI(), null));
     setInstances = true;
 	}
 	
 	public void addDocumentInString(String document) {
+    if (ilist == null) { ilist = new InstanceList (makeNewInstancePipe());}
+	  //System.out.println("Adding document: " + document);
     ilist.addThruPipe(new Instance(document, null, "added_document", null));
     setInstances = true;
   }

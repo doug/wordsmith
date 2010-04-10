@@ -1,19 +1,19 @@
 package wordsmith;
 
 public class TopicWordAssignment {
-  public String word;
-  public int topic;
+  String word;
+  int topic;
   
   public TopicWordAssignment(String word, int topic) {
     this.word = word;
     this.topic = topic;
   }
   
-  public String word() {
+  public String getWord() {
     return word;
   }
   
-  public int topic() {
+  public int getTopic() {
     return topic;
   }
 }

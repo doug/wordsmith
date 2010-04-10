@@ -1,18 +1,19 @@
 package wordsmith;
 
 public class WeightedWord {
-  public String word;
-  public double weight;
+  String word;
+  double weight;
+  
   public WeightedWord(String word, double weight) {
     this.word = word;
     this.weight = weight;
   }
   
-  public String word() {
+  public String getWord() {
     return word;
   }
   
-  public double weight() {
+  public double getWeight() {
     return weight;
   }
 }
