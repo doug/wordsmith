@@ -68,10 +68,10 @@ import cc.mallet.types.LabelSequence;
 public class Wordsmith {
   public final String VERSION = "0.1.0";
 
-	private ParallelTopicModel lda = null;
-	private int k = -1;
-	private boolean createModel = true;
-	private int showTopicsInterval = 10, showNTopWords = 7;
+  private ParallelTopicModel lda = null;
+  private int k = -1;
+  private boolean createModel = true;
+  private int showTopicsInterval = 10, showNTopWords = 7;
   private boolean setInstances = false;
   private int numIterations = -1;
   private int numThreads = 1; // 1 thread by default, for 1 core
@@ -82,7 +82,7 @@ public class Wordsmith {
   private String outputIntermediateModelFile = null;
   private int outputIntermediateModelFrequency = 10;
 
-	private HashSet<String> stopwordsList = new HashSet<String>();
+  private HashSet<String> stopwordsList = new HashSet<String>();
   private boolean addedEnglishStopwords = false;
   private boolean filterHtml = false;
   private boolean pruneUsingInfoGain = false;
@@ -94,45 +94,45 @@ public class Wordsmith {
   private TreeSet<IDSorter>[] topicSortedWordsCache = null;
 
   private InstanceList ilist = null;
-	
-	/**
-	 * a Constructor, usually called in the setup() method in your sketch to
-	 * initialize and start the library.
-	 * 
-	 * @param theParent
-	 */
-	public Wordsmith(PApplet theParent) {}
-	
-	// CREATE MODEL ----------------------------------------------------------------------------------
-	
+  
+  /**
+   * a Constructor, usually called in the setup() method in your sketch to
+   * initialize and start the library.
+   * 
+   * @param theParent
+   */
+  public Wordsmith(PApplet theParent) {}
+  
+  // CREATE MODEL ----------------------------------------------------------------------------------
+  
 
-	public void loadExistingModel(String file) {
+  public void loadExistingModel(String file) {
     try {
       lda = ParallelTopicModel.read(new File(file));
     } catch (Exception e) {
       System.err.println("Unable to restore saved topic model " + file + ": " + e);
     }
     this.createModel = false;
-	}
-	
-	
-	public void createNewModel(int numberOfTopics, double alpha, double beta) {
+  }
+  
+  
+  public void createNewModel(int numberOfTopics, double alpha, double beta) {
     this.createModel = true;
-	  this.k = numberOfTopics;
-	  this.numIterations = 250;
+    this.k = numberOfTopics;
+    this.numIterations = 250;
     lda = new ParallelTopicModel(numberOfTopics, alpha, beta);
-	}
+  }
 
-	public void createNewModel(int numberOfTopics) {
+  public void createNewModel(int numberOfTopics) {
     createNewModel(numberOfTopics, 50.0 / numberOfTopics, 0.03);
   }
-	
-	// CONFIGURE MODEL -------------------------------------------------------------------------------
+  
+  // CONFIGURE MODEL -------------------------------------------------------------------------------
 
   public void setIntermediateResultsFrequency(int numberOfIterations) {
     this.showTopicsInterval = numberOfIterations;
   }
-	
+  
   public void setNumberShownWordsForIntermediateResults(int numberOfWords) {
     this.showNTopWords = numberOfWords;
   }
@@ -140,11 +140,11 @@ public class Wordsmith {
   public void setNumberOfProcessIterations(int numIterations) {
     if (numIterations < 10) {
       System.err.println("You must have at least 10 iterations, and that is probably too small. " +
-      		"Think on the order of 100-400, where 250/300 is usually optimal.");
+          "Think on the order of 100-400, where 250/300 is usually optimal.");
       return;
     } else if (numIterations < 100) {
       System.out.println("WARNING: Few iterations. Still processing, but for best results, " +
-      		"think on the order of 100-400, where 250/300 is usually optimal.");
+          "think on the order of 100-400, where 250/300 is usually optimal.");
     }
     this.numIterations  = numIterations;
   }
@@ -170,7 +170,7 @@ public class Wordsmith {
   public void useMulticore(int numCores) {
     if (numCores < 0 || numCores > 8) {
       System.err.println("You must use between 1 & 8 cores. If your machine is not multi-core, " +
-      		"anything other than 1 may slow it down a bit.");
+          "anything other than 1 may slow it down a bit.");
     }
     numThreads = numCores;
   }
@@ -204,28 +204,28 @@ public class Wordsmith {
   }
 
   // INFERENCE -------------------------------------------------------------------------------------
-	
-	public void extractTopicsFromDocuments() {
-	  if (!canStartLda()) {
-	    return;
-	  }
-	  
+  
+  public void extractTopicsFromDocuments() {
+    if (!canStartLda()) {
+      return;
+    }
+    
     doPrune();
-	  configureLda();
+    configureLda();
 
-	  System.out.println("Starting LDA Inference... this might take a while (read: hours) depending " +
-	  		"on the number of topics, number of documents, and document length.");
-		try {
-	    lda.addInstances(ilist);
-			lda.estimate();
-		} catch (IOException e) {
-			e.printStackTrace();
-			System.err.println("LDA estimation failed: " + e.getMessage());
-		}
+    System.out.println("Starting LDA Inference... this might take a while (read: hours) depending " +
+        "on the number of topics, number of documents, and document length.");
+    try {
+      lda.addInstances(ilist);
+      lda.estimate();
+    } catch (IOException e) {
+      e.printStackTrace();
+      System.err.println("LDA estimation failed: " + e.getMessage());
+    }
 
-		saveState();
-	}
-	
+    saveState();
+  }
+  
   private void doPrune() {
     if (pruneBottomN) {
       long startTime = System.currentTimeMillis();
@@ -380,43 +380,43 @@ public class Wordsmith {
     return k;
   }
 
-	public String[] getTopWordsForTopic(int n) {
-	  if (n > k) {
-	    System.err.println("You must enter a topic number from 0 to " + k);
-	    return null;
-	  }
-	  
+  public String[] getTopWordsForTopic(int n) {
+    if (n > k) {
+      System.err.println("You must enter a topic number from 0 to " + k);
+      return null;
+    }
+    
     if (lda == null) {
       System.err.println("You must first create the model and extract the topics.");
       return null;
     }
 
     if (topWordsCache == null) {
-	    topWordsCache = lda.getTopWords(1000);
-	  }
-	  
+      topWordsCache = lda.getTopWords(1000);
+    }
+    
     String[] toString = new String[topWordsCache[n].length];
     System.arraycopy(topWordsCache[n], 0, toString, 0, topWordsCache[n].length);
     
-		return toString;
-	}
+    return toString;
+  }
 
-	@SuppressWarnings("unchecked")
+  @SuppressWarnings("unchecked")
   public WeightedWord[] getTopWeightedWordsForTopic(int n) {
     if (n > k) {
-	    System.err.println("You must enter a topic number from 0 to " + k);
+      System.err.println("You must enter a topic number from 0 to " + k);
       return null;
     }
-	    
+      
     if (lda == null) {
       System.err.println("You must first create the model and extract the topics.");
       return null;
     }
-	  
+    
     if (topicSortedWordsCache == null) {
-	     topicSortedWordsCache = lda.getSortedWords();
+       topicSortedWordsCache = lda.getSortedWords();
     }
-	    
+      
     TreeSet<IDSorter> sortedWords = topicSortedWordsCache[n];
     Iterator<IDSorter> iterator = sortedWords.iterator();
     int word = 1;
@@ -431,13 +431,13 @@ public class Wordsmith {
     }
     return words.toArray(new WeightedWord[0]);
   }
-	
-	public int getNumProcessedDocuments() {
-	  return lda.getData().size();
-	}
-	
-	public TopicWordAssignment[] getTopicWordAssignmentsForDocument(int documentIndex) {
-	  ArrayList<TopicAssignment> data = lda.getData();
+  
+  public int getNumProcessedDocuments() {
+    return lda.getData().size();
+  }
+  
+  public TopicWordAssignment[] getTopicWordAssignmentsForDocument(int documentIndex) {
+    ArrayList<TopicAssignment> data = lda.getData();
     FeatureSequence tokenSequence = (FeatureSequence) data.get(documentIndex).instance.getData();
     LabelSequence topicSequence = (LabelSequence) data.get(documentIndex).topicSequence;
     
@@ -449,13 +449,13 @@ public class Wordsmith {
                                                 topic); 
     }
     return assignments;
-	}
-	
-	// ADD DOCUMENTS ---------------------------------------------------------------------------------
+  }
+  
+  // ADD DOCUMENTS ---------------------------------------------------------------------------------
 
-	private SerialPipes makeNewInstancePipe() {
-	  return new SerialPipes (
-	      new Pipe[] {
+  private SerialPipes makeNewInstancePipe() {
+    return new SerialPipes (
+        new Pipe[] {
           new SaveDataInSource(),
 //          new PrintInputAndTarget ("SaveDataInSource"),
           new Input2CharSequence(),
@@ -483,16 +483,16 @@ public class Wordsmith {
           new TokenSequence2FeatureSequence(),
 //          new PrintInputAndTarget ("TokenSequence2FeatureSequence"),
         });
-	}
-	
-	public void addDocumentsInDirectory(String directory) {
+  }
+  
+  public void addDocumentsInDirectory(String directory) {
     if (ilist == null) { ilist = new InstanceList (makeNewInstancePipe());}
-	  boolean removeCommonPrefix=true;
-	  ilist.addThruPipe(
+    boolean removeCommonPrefix=true;
+    ilist.addThruPipe(
         new FileIterator(directory, FileIterator.STARTING_DIRECTORIES, removeCommonPrefix));
-		setInstances = true;
-	}
-	
+    setInstances = true;
+  }
+  
   public void addDocumentInFile(String filepath) {
     addDocumentInFile(new File(filepath));
   }
@@ -502,23 +502,23 @@ public class Wordsmith {
     if (ilist == null) { ilist = new InstanceList (makeNewInstancePipe());}
     ilist.addThruPipe(new Instance(f, null, f.toURI(), null));
     setInstances = true;
-	}
-	
-	public void addDocumentInString(String document) {
+  }
+  
+  public void addDocumentInString(String document) {
     if (ilist == null) { ilist = new InstanceList (makeNewInstancePipe());}
-	  //System.out.println("Adding document: " + document);
+    //System.out.println("Adding document: " + document);
     ilist.addThruPipe(new Instance(document, null, "added_document", null));
     setInstances = true;
   }
 
-	// MISC ------------------------------------------------------------------------------------------
-	
-	/**
-	 * return the version of the library.
-	 * 
-	 * @return String
-	 */
-	public String version() {
-		return VERSION;
-	}
+  // MISC ------------------------------------------------------------------------------------------
+  
+  /**
+   * return the version of the library.
+   * 
+   * @return String
+   */
+  public String version() {
+    return VERSION;
+  }
 }
