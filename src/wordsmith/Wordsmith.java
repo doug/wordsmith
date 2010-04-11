@@ -380,8 +380,12 @@ public class Wordsmith {
     return k;
   }
 
-  public String[] getTopWordsForTopic(int n) {
-    if (n > k) {
+  public String[] getTopWordsForTopic(int topic) {
+    return getTopWordsForTopic(topic, 1000);
+  }
+
+  public String[] getTopWordsForTopic(int topic, int numWords) {
+    if (topic > k) {
       System.err.println("You must enter a topic number from 0 to " + k);
       return null;
     }
@@ -392,18 +396,24 @@ public class Wordsmith {
     }
 
     if (topWordsCache == null) {
-      topWordsCache = lda.getTopWords(1000);
+      topWordsCache = lda.getTopWords(numWords);
+    } else if (topWordsCache[0].length < numWords) {
+      topWordsCache = lda.getTopWords(numWords);
     }
     
-    String[] toString = new String[topWordsCache[n].length];
-    System.arraycopy(topWordsCache[n], 0, toString, 0, topWordsCache[n].length);
+    String[] toString = new String[numWords];
+    System.arraycopy(topWordsCache[topic], 0, toString, 0, numWords);
     
     return toString;
   }
 
+  public WeightedWord[] getTopWeightedWordsForTopic(int topic) {
+    return getTopWeightedWordsForTopic(topic, 1000);
+  }
+  
   @SuppressWarnings("unchecked")
-  public WeightedWord[] getTopWeightedWordsForTopic(int n) {
-    if (n > k) {
+  public WeightedWord[] getTopWeightedWordsForTopic(int topic, int numWords) {
+    if (topic > k) {
       System.err.println("You must enter a topic number from 0 to " + k);
       return null;
     }
@@ -414,15 +424,15 @@ public class Wordsmith {
     }
     
     if (topicSortedWordsCache == null) {
-       topicSortedWordsCache = lda.getSortedWords();
+      topicSortedWordsCache = lda.getSortedWords();
     }
       
-    TreeSet<IDSorter> sortedWords = topicSortedWordsCache[n];
+    TreeSet<IDSorter> sortedWords = topicSortedWordsCache[topic];
     Iterator<IDSorter> iterator = sortedWords.iterator();
     int word = 1;
 
-    ArrayList<WeightedWord> words = new ArrayList<WeightedWord>(n);
-    while (iterator.hasNext() && word < 1000) {
+    ArrayList<WeightedWord> words = new ArrayList<WeightedWord>(topic);
+    while (iterator.hasNext() && word < numWords) {
       IDSorter info = iterator.next();
       WeightedWord wword = new WeightedWord((String)lda.getAlphabet().lookupObject(info.getID()),
                                             info.getWeight());
