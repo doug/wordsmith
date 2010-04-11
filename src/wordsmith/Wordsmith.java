@@ -375,6 +375,10 @@ public class Wordsmith {
   }
 
   // USE INFERRED RESULTS --------------------------------------------------------------------------
+  
+  public int getNumTopics() {
+    return k;
+  }
 
 	public String[] getTopWordsForTopic(int n) {
 	  if (n > k) {
