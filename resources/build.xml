@@ -6,7 +6,7 @@
 
 	
 <!-- #### (1) where are your processing libraries located? edit location. #### -->
-	<property name="processing" location="/Users/rdf/src/processing/libraries"/>
+	<property name="processing" location="/Users/aaron/Documents/Processing/libraries"/>
 
 
 <!-- #### (2) where are the jar files located that are required for compiling 
@@ -29,7 +29,7 @@
 				implemented ito the document automatically. #### -->	
 				
 <!-- #### (5) who is the author of this library?  edit value.  #### -->
-	<property name="author" value="Doug Fritz"/>
+	<property name="author" value="Aaron Zinman"/>
 	
 <!-- #### (6) which copyright?  edit value.  #### -->
 	<property name="copyright" value="(c) 2010"/>
