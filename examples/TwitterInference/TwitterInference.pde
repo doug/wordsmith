@@ -1,7 +1,7 @@
 import wordsmith.*;
 import pwitter.*;
 
-Wordsmith wordsmith = new Wordsmith(this);
+Wordsmith wordsmith = new Wordsmith();
 
 // Choosing the number of topics is tricky. Trial and error is not a bad way necessarily...
 // Too few topics and it will be more summarization, but not capture a lot of the nuances.
