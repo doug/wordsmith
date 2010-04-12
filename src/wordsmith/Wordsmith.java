@@ -33,7 +33,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.TreeSet;
 
-import processing.core.PApplet;
 import cc.mallet.pipe.CharSequence2TokenSequence;
 import cc.mallet.pipe.CharSequenceRemoveHTML;
 import cc.mallet.pipe.Input2CharSequence;
@@ -41,9 +40,7 @@ import cc.mallet.pipe.Noop;
 import cc.mallet.pipe.Pipe;
 import cc.mallet.pipe.SaveDataInSource;
 import cc.mallet.pipe.SerialPipes;
-import cc.mallet.pipe.TokenSequence2FeatureSequence;
 import cc.mallet.pipe.TokenSequenceLowercase;
-import cc.mallet.pipe.TokenSequenceRemoveStopwords;
 import cc.mallet.pipe.iterator.FileIterator;
 import cc.mallet.topics.ParallelTopicModel;
 import cc.mallet.topics.TopicAssignment;
@@ -56,6 +53,8 @@ import cc.mallet.types.InfoGain;
 import cc.mallet.types.Instance;
 import cc.mallet.types.InstanceList;
 import cc.mallet.types.LabelSequence;
+import cc.mallet.types.Token;
+import cc.mallet.types.TokenSequence;
 
 /**
  * Wordsmith is a lib for doing topic modeling and text analysis based off of mallet
@@ -94,14 +93,6 @@ public class Wordsmith {
   private TreeSet<IDSorter>[] topicSortedWordsCache = null;
 
   private InstanceList ilist = null;
-  
-  /**
-   * a Constructor, usually called in the setup() method in your sketch to
-   * initialize and start the library.
-   * 
-   * @param theParent
-   */
-  public Wordsmith(PApplet theParent) {}
   
   // CREATE MODEL ----------------------------------------------------------------------------------
   
@@ -397,19 +388,21 @@ public class Wordsmith {
 
     if (topWordsCache == null) {
       topWordsCache = lda.getTopWords(numWords);
-    } else if (topWordsCache[0].length < numWords) {
+    } else if (topWordsCache[topic].length < numWords) {
       topWordsCache = lda.getTopWords(numWords);
     }
-    if (topWordsCache[0].length < numWords) {
-      System.err.println("WARNING: Requested " + numWords + " top words, but only " + 
-                         topWordsCache[0].length + " are available. Returning a smaller array.");
-      numWords = topWordsCache[0].length;
+
+    Object[] fromStrings = topWordsCache[topic];
+    if (fromStrings.length < numWords) {
+      System.err.print("WARNING: Requested " + numWords + " top words, but only " + 
+                       fromStrings.length + " are available. Returning the smaller array.");
+      numWords = fromStrings.length;
     }
     
-    String[] toString = new String[numWords];
-    System.arraycopy(topWordsCache[topic], 0, toString, 0, numWords);
+    String[] toStrings = new String[numWords];
+    System.arraycopy(fromStrings, 0, toStrings, 0, numWords);
     
-    return toString;
+    return toStrings;
   }
 
   public WeightedWord[] getTopWeightedWordsForTopic(int topic) {
@@ -452,22 +445,78 @@ public class Wordsmith {
   }
   
   public TopicWordAssignment[] getTopicWordAssignmentsForDocument(int documentIndex) {
+    if (lda == null) {
+      System.err.println("You must first create the model and extract the topics.");
+      return null;
+    }
+
     ArrayList<TopicAssignment> data = lda.getData();
     FeatureSequence tokenSequence = (FeatureSequence) data.get(documentIndex).instance.getData();
     LabelSequence topicSequence = (LabelSequence) data.get(documentIndex).topicSequence;
     
-    TopicWordAssignment[] assignments = new TopicWordAssignment[topicSequence.getLength()];
-    for (int pi = 0; pi < topicSequence.getLength(); pi++) {
+    if (!cacheTokenization || cachedTokenSequences == null) {
+      TopicWordAssignment[] assignments = new TopicWordAssignment[topicSequence.getLength()];
+      for (int pi = 0; pi < topicSequence.getLength(); pi++) {
+        int type = tokenSequence.getIndexAtPosition(pi);
+        int topic = topicSequence.getIndexAtPosition(pi);
+        assignments[pi] = new TopicWordAssignment((String) lda.getAlphabet().lookupObject(type),
+                                                  topic); 
+      }
+      return assignments;
+    }
+    
+    // Use the cached tokens
+    TokenSequence originalTokens = cachedTokenSequences.get(documentIndex);
+    TopicWordAssignment[] assignments = new TopicWordAssignment[originalTokens.size()];
+    assert tokenSequence.size() <= originalTokens.size();
+
+    int pi = 0;
+    
+    // Iterate through each of the original tokens and inserting them into the new TopicWordAssignment
+    // vector with either their assigned topic, or identify as a stopword.
+    for (int i = 0; i < originalTokens.size(); i++) {
+      Token token = originalTokens.get(i);
+      if (token.getProperties() != null && token.getProperty("stopword").equals(true)) {
+        // Stop word... add the null topic assignment 
+        assignments[i] = new TopicWordAssignment(token.getText());
+        continue;
+      }
+      
       int type = tokenSequence.getIndexAtPosition(pi);
       int topic = topicSequence.getIndexAtPosition(pi);
-      assignments[pi] = new TopicWordAssignment((String) lda.getAlphabet().lookupObject(type),
-                                                topic); 
+      if (token.getText().equals((String) lda.getAlphabet().lookupObject(type))) {
+        // They line up... save the assignment and iterate to the next lda token
+        assignments[i] = new TopicWordAssignment(token.getText(), topic);
+        pi += 1;
+        if (pi >= tokenSequence.getLength()) {
+          // Hit the end of valid tokens.. just add the rest and be done with it.
+          while (++i < originalTokens.size()) {
+            assignments[i] = new TopicWordAssignment(token.getText());
+          }
+          break;
+        }
+      } else {
+        // Stop word / misc token... 
+        assignments[i] = new TopicWordAssignment(token.getText());
+      }
     }
     return assignments;
   }
   
   // ADD DOCUMENTS ---------------------------------------------------------------------------------
-
+  
+  private boolean cacheTokenization = false;
+  private ArrayList<TokenSequence> cachedTokenSequences;
+  public void cacheTokenizationOfDocuments(boolean cacheTokenization) {
+    if (!cacheTokenization) {
+      cachedTokenSequences = null;
+    }
+    this.cacheTokenization = cacheTokenization;
+    if (cacheTokenization && cachedTokenSequences == null) {
+      cachedTokenSequences = new ArrayList<TokenSequence>();
+    }
+  }
+  
   private SerialPipes makeNewInstancePipe() {
     return new SerialPipes (
         new Pipe[] {
@@ -484,18 +533,17 @@ public class Wordsmith {
           new TokenSequenceLowercase(),
 //          new PrintInputAndTarget ("TokenSequenceLowercase"),
           (addedEnglishStopwords
-           ? (Pipe) new TokenSequenceRemoveStopwords(false, false)
-                        .addStopWords(stopwordsList.toArray(new String[0]))
+           ? (Pipe) new TokenSequenceMarkStopwords(stopwordsList)
                         .addStopWords(Stopwords.augmentedEnglishStopWords)
-           : (Pipe) new TokenSequenceRemoveCustomStopwords(stopwordsList)),
+           : (Pipe) new TokenSequenceMarkStopwords(stopwordsList)),
 //          new PrintInputAndTarget ("TokenSequenceRemoveStopwords (" + addedEnglishStopwords + ") or TokenSequenceRemoveCustomStopwords"), // xxx
           (filterHtml
-                  ? (Pipe) new TokenSequenceRemoveCustomStopwords(new HashSet<String>())
-                           .addStopWords(Stopwords.htmlStopWords)
+                  ? (Pipe) new TokenSequenceMarkStopwords(Stopwords.htmlStopWords)
                   : (Pipe) new Noop()),
-
-          
-          new TokenSequence2FeatureSequence(),
+          (cacheTokenization
+                  ? (Pipe) new TokenSequenceCacher(cachedTokenSequences)
+                  : (Pipe) new Noop()),
+          new TokenSequence2StopwordlessFeatureSequence(),
 //          new PrintInputAndTarget ("TokenSequence2FeatureSequence"),
         });
   }
@@ -535,5 +583,8 @@ public class Wordsmith {
    */
   public String version() {
     return VERSION;
+  }
+    
+  public static void main (String[] args) {
   }
 }
