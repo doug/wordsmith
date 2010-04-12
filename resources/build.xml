@@ -29,7 +29,7 @@
 				implemented ito the document automatically. #### -->	
 				
 <!-- #### (5) who is the author of this library?  edit value.  #### -->
-	<property name="author" value="Aaron Zinman"/>
+	<property name="author" value="Aaron Zinman and Doug Fritz"/>
 	
 <!-- #### (6) which copyright?  edit value.  #### -->
 	<property name="copyright" value="(c) 2010"/>
