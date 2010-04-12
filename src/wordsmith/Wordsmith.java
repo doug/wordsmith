@@ -400,6 +400,11 @@ public class Wordsmith {
     } else if (topWordsCache[0].length < numWords) {
       topWordsCache = lda.getTopWords(numWords);
     }
+    if (topWordsCache[0].length < numWords) {
+      System.err.println("WARNING: Requested " + numWords + " top words, but only " + 
+                         topWordsCache[0].length + " are available. Returning a smaller array.");
+      numWords = topWordsCache[0].length;
+    }
     
     String[] toString = new String[numWords];
     System.arraycopy(topWordsCache[topic], 0, toString, 0, numWords);
@@ -431,7 +436,7 @@ public class Wordsmith {
     Iterator<IDSorter> iterator = sortedWords.iterator();
     int word = 1;
 
-    ArrayList<WeightedWord> words = new ArrayList<WeightedWord>(topic);
+    ArrayList<WeightedWord> words = new ArrayList<WeightedWord>(sortedWords.size());
     while (iterator.hasNext() && word < numWords) {
       IDSorter info = iterator.next();
       WeightedWord wword = new WeightedWord((String)lda.getAlphabet().lookupObject(info.getID()),
