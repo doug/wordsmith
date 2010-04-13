@@ -33,6 +33,9 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.TreeSet;
 
+import processing.core.PApplet;
+import pwitter.Pweet;
+import pwitter.Pwitter;
 import cc.mallet.pipe.CharSequence2TokenSequence;
 import cc.mallet.pipe.CharSequenceRemoveHTML;
 import cc.mallet.pipe.Input2CharSequence;
@@ -41,6 +44,7 @@ import cc.mallet.pipe.Pipe;
 import cc.mallet.pipe.SaveDataInSource;
 import cc.mallet.pipe.SerialPipes;
 import cc.mallet.pipe.TokenSequenceLowercase;
+import cc.mallet.pipe.TokenSequenceRemoveStopwords;
 import cc.mallet.pipe.iterator.FileIterator;
 import cc.mallet.topics.ParallelTopicModel;
 import cc.mallet.topics.TopicAssignment;
@@ -389,12 +393,14 @@ public class Wordsmith {
     if (topWordsCache == null) {
       topWordsCache = lda.getTopWords(numWords);
     } else if (topWordsCache[topic].length < numWords) {
+      System.err.print("NOTICE: Requested " + numWords + " top words, cached version had only " +
+                       topWordsCache[topic].length + " words. Re-acquiring from topic model.");
       topWordsCache = lda.getTopWords(numWords);
     }
 
     Object[] fromStrings = topWordsCache[topic];
     if (fromStrings.length < numWords) {
-      System.err.print("WARNING: Requested " + numWords + " top words, but only " + 
+      System.err.println("WARNING: Requested " + numWords + " top words, but only " + 
                        fromStrings.length + " are available. Returning the smaller array.");
       numWords = fromStrings.length;
     }
@@ -433,7 +439,7 @@ public class Wordsmith {
     while (iterator.hasNext() && word < numWords) {
       IDSorter info = iterator.next();
       WeightedWord wword = new WeightedWord((String)lda.getAlphabet().lookupObject(info.getID()),
-                                            info.getWeight());
+                                            (float)info.getWeight());
       words.add(wword);
       word++;
     }
@@ -455,6 +461,8 @@ public class Wordsmith {
     LabelSequence topicSequence = (LabelSequence) data.get(documentIndex).topicSequence;
     
     if (!cacheTokenization || cachedTokenSequences == null) {
+      System.out.println("WARNING: NOT using cached token sequences; " +
+      		"output will be heavily tokenized with stopwords removed!");
       TopicWordAssignment[] assignments = new TopicWordAssignment[topicSequence.getLength()];
       for (int pi = 0; pi < topicSequence.getLength(); pi++) {
         int type = tokenSequence.getIndexAtPosition(pi);
@@ -476,21 +484,27 @@ public class Wordsmith {
     // vector with either their assigned topic, or identify as a stopword.
     for (int i = 0; i < originalTokens.size(); i++) {
       Token token = originalTokens.get(i);
+      //System.out.println("at token " + i + "=" + token.getText());
       if (token.getProperties() != null && token.getProperty("stopword").equals(true)) {
         // Stop word... add the null topic assignment 
+        //System.out.println(token.getText() + " is stopword...continuing");
         assignments[i] = new TopicWordAssignment(token.getText());
         continue;
       }
       
       int type = tokenSequence.getIndexAtPosition(pi);
       int topic = topicSequence.getIndexAtPosition(pi);
+      //System.out.println("Comparing against pi=" + pi + "=" + (String) lda.getAlphabet().lookupObject(type));
       if (token.getText().equals((String) lda.getAlphabet().lookupObject(type))) {
         // They line up... save the assignment and iterate to the next lda token
+        //System.out.println("match...assigning & incrementing pi");
         assignments[i] = new TopicWordAssignment(token.getText(), topic);
         pi += 1;
         if (pi >= tokenSequence.getLength()) {
+          //System.out.println("hit end of pi... just putting in rest");
           // Hit the end of valid tokens.. just add the rest and be done with it.
           while (++i < originalTokens.size()) {
+            token = originalTokens.get(i);
             assignments[i] = new TopicWordAssignment(token.getText());
           }
           break;
@@ -535,6 +549,7 @@ public class Wordsmith {
           (addedEnglishStopwords
            ? (Pipe) new TokenSequenceMarkStopwords(stopwordsList)
                         .addStopWords(Stopwords.augmentedEnglishStopWords)
+                        .addStopWords(Stopwords.malletEnglishStopwords)
            : (Pipe) new TokenSequenceMarkStopwords(stopwordsList)),
 //          new PrintInputAndTarget ("TokenSequenceRemoveStopwords (" + addedEnglishStopwords + ") or TokenSequenceRemoveCustomStopwords"), // xxx
           (filterHtml
@@ -586,5 +601,84 @@ public class Wordsmith {
   }
     
   public static void main (String[] args) {
+    Wordsmith wordsmith = new Wordsmith();
+
+    // Choosing the number of topics is tricky. Trial and error is not a bad way necessarily...
+    // Too few topics and it will be more summarization, but not capture a lot of the nuances.
+    // Too many topics, and they can become junky and repetitive,
+    // but more nuanced topics get through.
+    int numTopics = 6;
+    // Alpha usually should be between 0.5 & 3. Beta should be between 0.01 & 0.2.
+    // Hyperparameter optimization (built-in) makes the initial values not as important, given
+    // enough iterations.
+    wordsmith.createNewModel(numTopics, 2.5, 0.37); // Values for johnmaeda's twitter
+
+    // Speed up the algorithm if you have a multicore machine by setting the number of cores
+    // higher, but only do so for large data sets (like tens of thousands of large documents).
+    // Otherwise it will be slower.
+    int numCores = 1;
+    wordsmith.useMulticore(numCores);
+
+    // Not too much data so its relatively quick. Better to get higher accuracy instead.
+    wordsmith.setNumberOfProcessIterations(1000);
+
+    // Don't output so much debug data
+    wordsmith.setIntermediateResultsFrequency(500);
+    wordsmith.setNumberShownWordsForIntermediateResults(20);
+
+    // Strip out meaningless pieces of the tweet.
+    wordsmith.cacheTokenizationOfDocuments(true);
+    wordsmith.removeHtmlFromDocuments();
+    wordsmith.removeCommonEnglishWordsFromDocuments();
+    wordsmith.pruneWordsOccurringLessThanThreshold(3);
+
+    // Load the Tweets
+    Pwitter twitter = new Pwitter(new PApplet());
+    String user = "johnmaeda";
+    ArrayList tweets = twitter.loadTweets("data/" + user + ".xml");
+    wordsmith.removeWordFromDocuments(user);
+
+    for (int i = 0; i < tweets.size(); i++) {
+      Pweet tweet = (Pweet) tweets.get(i);
+      String tweetText = tweet.getText();
+      wordsmith.addDocumentInString(tweetText);
+    }
+
+    // Fire it up!
+    wordsmith.extractTopicsFromDocuments();
+
+    // Report on what we found!
+    for (int topic = 0; topic < numTopics; topic++) {
+      System.out.println("\nTopic " + topic + " ------------------");
+      Object[] topWords = wordsmith.getTopWordsForTopic(topic);
+      for (int i = 0; i < 10; i++) {
+        String prefix;
+        switch(i) {
+          case 0:
+            prefix = "st";
+            break;
+          case 1:
+            prefix = "nd";
+            break;
+          case 2:
+            prefix = "rd";
+            break;
+          default:
+            prefix = "th";
+        }
+
+        System.out.println("  " + (i+1) + prefix + " most probable word: " + topWords[i]);
+      }
+    }
+
+    // Grab a random tweet and go through its assignments.
+    Pweet tweet = (Pweet) tweets.get(5);
+    System.out.println("\n\n\nTopic assignments per word in tweet: " + tweet.getText());
+    TopicWordAssignment[] assignments = wordsmith.getTopicWordAssignmentsForDocument(5);
+    for (int i = 0; i < assignments.length; i++) {
+      TopicWordAssignment assignment = assignments[i];
+      System.out.println(assignment.getWord() + " is assigned to topic " + assignment.getTopic());
+    }
+    System.out.println("\nWords not printed have been excluded from the vocabulary using the filters above.");
   }
 }

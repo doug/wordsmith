@@ -2,9 +2,9 @@ package wordsmith;
 
 public class WeightedWord {
   String word;
-  double weight;
+  float weight;
   
-  public WeightedWord(String word, double weight) {
+  public WeightedWord(String word, float weight) {
     this.word = word;
     this.weight = weight;
   }
@@ -13,7 +13,7 @@ public class WeightedWord {
     return word;
   }
   
-  public double getWeight() {
+  public float getWeight() {
     return weight;
   }
 }

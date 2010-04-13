@@ -27,6 +27,7 @@ wordsmith.setIntermediateResultsFrequency(500);
 wordsmith.setNumberShownWordsForIntermediateResults(20);
 
 // Strip out meaningless pieces of the tweet.
+wordsmith.cacheTokenizationOfDocuments(true);
 wordsmith.removeHtmlFromDocuments();
 wordsmith.removeCommonEnglishWordsFromDocuments();
 wordsmith.pruneWordsOccurringLessThanThreshold(3);

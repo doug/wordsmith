@@ -23,8 +23,9 @@ public class TokenSequenceMarkStopwords extends Pipe implements Serializable {
 
   
   public TokenSequenceMarkStopwords addStopWords (String[] words) {
-    for (int i = 0; i < words.length; i++)
+    for (int i = 0; i < words.length; i++) {
       stoplist.add (words[i]);
+    }
     return this;
   }
 
